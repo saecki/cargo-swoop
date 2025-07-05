@@ -1,0 +1,194 @@
+use std::fs::ReadDir;
+use std::path::PathBuf;
+use std::process::ExitCode;
+
+use clap::Parser;
+
+use crate::iter::{DirIter, DirIterItem, DirStackEntry};
+
+mod iter;
+
+#[derive(Parser)]
+#[clap(name = "cargo-swoop")]
+pub struct Args {
+    #[clap(long)]
+    search_dir: Option<PathBuf>,
+
+    #[clap(long)]
+    follow_symlinks: bool,
+}
+
+pub struct Context {
+    crates: Vec<CrateInfo>,
+}
+
+impl Context {
+    pub fn new() -> Self {
+        Self { crates: Vec::new() }
+    }
+}
+
+struct CrateInfo {
+    path: PathBuf,
+    target_dir_size: Option<u64>,
+}
+
+fn main() -> ExitCode {
+    match run() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(e) => {
+            eprintln!("{e}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+fn run() -> anyhow::Result<()> {
+    let args = Args::parse();
+    let dir_path = match args.search_dir.clone() {
+        Some(dir) => dir,
+        None => std::env::current_dir()?,
+    };
+
+    let mut ctx = Context::new();
+    find_crates(&mut ctx, &args, dir_path)?;
+
+    ctx.crates.sort_by_key(|c| c.target_dir_size);
+
+    for c in ctx.crates.iter() {
+        if let Some(size) = c.target_dir_size {
+            const KB: u64 = 1024;
+            const MB: u64 = 1024 * KB;
+            const GB: u64 = 1024 * MB;
+            match size {
+                0..KB => print!("{size:>5}b  "),
+                0..MB => print!("{:>5.2}k  ", size as f64 / KB as f64),
+                0..GB => print!("{:>5.2}m  ", size as f64 / MB as f64),
+                GB.. => print!("{:>5.2}g  ", size as f64 / GB as f64),
+            }
+        } else {
+            print!("<empty> ");
+        }
+        println!("{}", c.path.display());
+    }
+
+    Ok(())
+}
+
+struct DirContext {
+    path: PathBuf,
+    iter: ReadDir,
+    has_manifest: bool,
+    target_dir: Option<PathBuf>,
+    /// Whether this dir has been added to the list of crates.
+    done: bool,
+}
+
+impl DirStackEntry for DirContext {
+    fn new(path: PathBuf, iter: ReadDir) -> Self {
+        Self {
+            path,
+            iter,
+            has_manifest: false,
+            target_dir: None,
+            done: false,
+        }
+    }
+
+    fn iter(&mut self) -> &mut ReadDir {
+        &mut self.iter
+    }
+}
+
+fn find_crates(ctx: &mut Context, args: &Args, path: PathBuf) -> anyhow::Result<()> {
+    let mut dir_iter = DirIter::<DirContext>::new(path)?.follow_symlinks(args.follow_symlinks);
+
+    while let Some(item) = dir_iter.next()? {
+        match item {
+            DirIterItem::File(entry) => {
+                let path = entry.path();
+                let Some(file_name) = path.file_name() else {
+                    continue;
+                };
+                if file_name == "Cargo.toml" {
+                    let dir = dir_iter.current_dir();
+                    dir.has_manifest = true;
+                    try_compute_target_size(ctx, args, dir)?;
+                }
+            }
+            DirIterItem::Dir(path) => {
+                if path.file_name().is_some_and(|name| name == "target") {
+                    let dir = dir_iter.current_dir();
+                    dir.target_dir = Some(path);
+                    try_compute_target_size(ctx, args, dir)?;
+                    continue;
+                }
+
+                // Don't enter hidden directories.
+                if !path.starts_with(".") {
+                    dir_iter.enter_dir(path)?;
+                }
+            }
+            DirIterItem::FinishedDir(dir) => {
+                if !dir.done && dir.has_manifest {
+                    ctx.crates.push(CrateInfo {
+                        path: dir.path,
+                        target_dir_size: None,
+                    });
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+struct DirSizeContext {
+    iter: ReadDir,
+}
+
+impl DirStackEntry for DirSizeContext {
+    fn new(_: PathBuf, iter: ReadDir) -> Self {
+        Self { iter }
+    }
+
+    fn iter(&mut self) -> &mut ReadDir {
+        &mut self.iter
+    }
+}
+
+fn try_compute_target_size(
+    ctx: &mut Context,
+    args: &Args,
+    dir: &mut DirContext,
+) -> anyhow::Result<()> {
+    if !dir.has_manifest {
+        return Ok(());
+    }
+    let Some(path) = dir.target_dir.clone() else {
+        return Ok(());
+    };
+
+    dir.done = true;
+
+    let mut size = 0;
+
+    let mut dir_iter =
+        DirIter::<DirSizeContext>::new(path.clone())?.follow_symlinks(args.follow_symlinks);
+    while let Some(item) = dir_iter.next()? {
+        match item {
+            DirIterItem::File(entry) => {
+                size += entry.metadata()?.len();
+            }
+            DirIterItem::Dir(path) => dir_iter.enter_dir(path)?,
+            DirIterItem::FinishedDir(_) => (),
+        }
+    }
+
+    ctx.crates.push(CrateInfo {
+        path,
+        target_dir_size: Some(size),
+    });
+
+    Ok(())
+}
