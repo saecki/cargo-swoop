@@ -55,7 +55,14 @@ fn main() -> ExitCode {
 }
 
 fn run() -> anyhow::Result<()> {
-    let args = Args::parse();
+    let mut args: Vec<String> = std::env::args().collect();
+    // remove "swoop" when invoked `cargo swoop`
+    // https://github.com/rust-lang/cargo/issues/7653
+    if args.len() > 1 && args[1] == "swoop" {
+        args.remove(1);
+    }
+    let args = Args::parse_from(args);
+
     let dir_path = match args.search_dir.clone() {
         Some(dir) => dir,
         None => std::env::current_dir()?,
