@@ -35,7 +35,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run() -> anyhow::Result<()> {
+fn run() -> std::io::Result<()> {
     let mut args: Vec<String> = std::env::args().collect();
     // remove "swoop" when invoked `cargo swoop`
     // https://github.com/rust-lang/cargo/issues/7653
@@ -103,7 +103,7 @@ impl DirStackEntry for DirContext {
     }
 }
 
-fn find_crates(ctx: &mut Context, args: &Args, path: PathBuf) -> anyhow::Result<()> {
+fn find_crates(ctx: &mut Context, args: &Args, path: PathBuf) -> std::io::Result<()> {
     let mut dir_iter = DirIter::<DirContext>::new(path)?.follow_symlinks(args.follow_symlinks);
 
     while let Some(item) = dir_iter.next()? {
@@ -164,7 +164,7 @@ fn try_compute_target_size(
     ctx: &mut Context,
     args: &Args,
     dir: &mut DirContext,
-) -> anyhow::Result<()> {
+) -> std::io::Result<()> {
     if !dir.has_manifest {
         return Ok(());
     }
