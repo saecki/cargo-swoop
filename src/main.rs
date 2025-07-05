@@ -16,6 +16,9 @@ pub struct Args {
 
     #[clap(long)]
     follow_symlinks: bool,
+
+    #[clap(long)]
+    show_empty: bool,
 }
 
 pub struct Context {
@@ -66,8 +69,10 @@ fn run() -> anyhow::Result<()> {
                 0..GB => print!("{:>5.2}m  ", size as f64 / MB as f64),
                 GB.. => print!("{:>5.2}g  ", size as f64 / GB as f64),
             }
+        } else if args.show_empty {
+            print!(" {ANSII_GRAY}<empty>{ANSII_CLEAR}  ");
         } else {
-            print!("<empty> ");
+            continue;
         }
         println!("{}", c.path.display());
     }
