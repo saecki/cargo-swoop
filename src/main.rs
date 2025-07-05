@@ -8,6 +8,15 @@ use crate::iter::{DirIter, DirIterItem, DirStackEntry};
 
 mod iter;
 
+const ANSII_GRAY: &str = "\x1b[90m";
+const ANSII_RED: &str = "\x1b[31m";
+const ANSII_GREEN: &str = "\x1b[32m";
+const ANSII_YELLOW: &str = "\x1b[33m";
+const ANSII_BLUE: &str = "\x1b[34m";
+const ANSII_MAGENTA: &str = "\x1b[35m";
+const ANSII_CYAN: &str = "\x1b[36m";
+const ANSII_CLEAR: &str = "\x1b[0m";
+
 #[derive(Parser)]
 #[clap(name = "cargo-swoop")]
 pub struct Args {
@@ -63,18 +72,21 @@ fn run() -> anyhow::Result<()> {
             const KB: u64 = 1024;
             const MB: u64 = 1024 * KB;
             const GB: u64 = 1024 * MB;
+            const TB: u64 = 1024 * GB;
+            #[rustfmt::skip]
             match size {
-                0..KB => print!("{size:>5}b  "),
-                0..MB => print!("{:>5.2}k  ", size as f64 / KB as f64),
-                0..GB => print!("{:>5.2}m  ", size as f64 / MB as f64),
-                GB.. => print!("{:>5.2}g  ", size as f64 / GB as f64),
-            }
+                0..KB => print!("{size:6} {ANSII_GREEN}B {ANSII_CLEAR} "),
+                0..MB => print!("{:6.2} {ANSII_CYAN   }KB{ANSII_CLEAR} ", size as f64 / KB as f64),
+                0..GB => print!("{:6.2} {ANSII_YELLOW }MB{ANSII_CLEAR} ", size as f64 / MB as f64),
+                0..TB => print!("{:6.2} {ANSII_MAGENTA}GB{ANSII_CLEAR} ", size as f64 / GB as f64),
+                TB.. =>  print!("{:6.2} {ANSII_RED    }TB{ANSII_CLEAR} ", size as f64 / TB as f64),
+            };
         } else if args.show_empty {
-            print!(" {ANSII_GRAY}<empty>{ANSII_CLEAR}  ");
+            print!("  {ANSII_GRAY}<empty>{ANSII_CLEAR} ");
         } else {
             continue;
         }
-        println!("{}", c.path.display());
+        println!("{ANSII_BLUE}{}{ANSII_CLEAR}", c.path.display());
     }
 
     Ok(())
