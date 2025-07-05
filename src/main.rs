@@ -73,20 +73,13 @@ fn run() -> anyhow::Result<()> {
 
     ctx.crates.sort_by_key(|c| c.target_dir_size);
 
+    let mut total_size = 0;
+    let mut only_empty_crates = true;
     for c in ctx.crates.iter() {
         if let Some(size) = c.target_dir_size {
-            const KB: u64 = 1024;
-            const MB: u64 = 1024 * KB;
-            const GB: u64 = 1024 * MB;
-            const TB: u64 = 1024 * GB;
-            #[rustfmt::skip]
-            match size {
-                0..KB => print!("{size:6} {ANSII_GREEN}B {ANSII_CLEAR} "),
-                0..MB => print!("{:6.2} {ANSII_CYAN   }KB{ANSII_CLEAR} ", size as f64 / KB as f64),
-                0..GB => print!("{:6.2} {ANSII_YELLOW }MB{ANSII_CLEAR} ", size as f64 / MB as f64),
-                0..TB => print!("{:6.2} {ANSII_MAGENTA}GB{ANSII_CLEAR} ", size as f64 / GB as f64),
-                TB.. =>  print!("{:6.2} {ANSII_RED    }TB{ANSII_CLEAR} ", size as f64 / TB as f64),
-            };
+            print!("{} ", Size(size));
+            total_size += size;
+            only_empty_crates = false;
         } else if args.show_empty {
             print!("  {ANSII_GRAY}<empty>{ANSII_CLEAR} ");
         } else {
@@ -95,7 +88,42 @@ fn run() -> anyhow::Result<()> {
         println!("{ANSII_BLUE}{}{ANSII_CLEAR}", c.path.display());
     }
 
+    if total_size > 0 {
+        println!("{ANSII_GRAY}----------{ANSII_CLEAR}");
+        println!("{} ", Size(total_size));
+    } else if only_empty_crates && !args.show_empty {
+        if ctx.crates.is_empty() {
+            println!("{ANSII_GRAY}no crates found{ANSII_CLEAR}");
+        } else {
+            println!("{ANSII_GRAY}only empty crates found{ANSII_CLEAR}");
+        }
+    }
+
     Ok(())
+}
+
+struct Size(u64);
+
+impl std::fmt::Display for Size {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let Size(size) = *self;
+
+        const KB: u64 = 1024;
+        const MB: u64 = 1024 * KB;
+        const GB: u64 = 1024 * MB;
+        const TB: u64 = 1024 * GB;
+
+        #[rustfmt::skip]
+        match self.0 {
+            0..KB => write!(f, "{size:6} {ANSII_GREEN}B {ANSII_CLEAR}")?,
+            0..MB => write!(f, "{:6.2} {ANSII_CYAN   }KB{ANSII_CLEAR}", size as f64 / KB as f64)?,
+            0..GB => write!(f, "{:6.2} {ANSII_YELLOW }MB{ANSII_CLEAR}", size as f64 / MB as f64)?,
+            0..TB => write!(f, "{:6.2} {ANSII_MAGENTA}GB{ANSII_CLEAR}", size as f64 / GB as f64)?,
+            TB.. =>  write!(f, "{:6.2} {ANSII_RED    }TB{ANSII_CLEAR}", size as f64 / TB as f64)?,
+        };
+
+        Ok(())
+    }
 }
 
 struct DirContext {
