@@ -4,22 +4,11 @@ use std::process::ExitCode;
 
 use clap::Parser;
 
+use crate::cli::{ANSII_BLUE, ANSII_CLEAR, ANSII_GRAY, ANSII_RED, Args};
 use crate::iter::{DirIter, DirIterItem, DirStackEntry};
 
-mod display;
+mod cli;
 mod iter;
-
-#[derive(Parser)]
-#[clap(name = "cargo-swoop")]
-pub struct Args {
-    search_dir: Option<PathBuf>,
-
-    #[clap(long)]
-    follow_symlinks: bool,
-
-    #[clap(long)]
-    show_empty: bool,
-}
 
 pub struct Context {
     crates: Vec<CrateInfo>,
@@ -65,7 +54,26 @@ fn run() -> anyhow::Result<()> {
 
     ctx.crates.sort_by_key(|c| c.target_dir_size);
 
-    display::crates(&ctx, &args);
+    let stats = cli::crate_stats(&ctx);
+    cli::display_crates(&ctx, &args, &stats);
+
+    if stats.non_empty_crates > 0 {
+        let remove_dirs = cli::confirmation("\nremove target directories");
+        if remove_dirs {
+            for c in ctx.crates.iter() {
+                if c.target_dir_size.is_some() {
+                    let target_dir = c.path.join("target");
+                    println!(
+                        "{ANSII_RED}removing{ANSII_CLEAR} {ANSII_BLUE}{}{ANSII_CLEAR}",
+                        target_dir.display()
+                    );
+                    std::fs::remove_dir_all(target_dir)?;
+                }
+            }
+        } else {
+            println!("{ANSII_GRAY}cancelled{ANSII_CLEAR}");
+        }
+    }
 
     Ok(())
 }
@@ -181,7 +189,7 @@ fn try_compute_target_size(
     }
 
     ctx.crates.push(CrateInfo {
-        path,
+        path: dir.path.clone(),
         target_dir_size: Some(size),
     });
 

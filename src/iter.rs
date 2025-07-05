@@ -1,6 +1,8 @@
 use std::fs::ReadDir;
 use std::path::PathBuf;
 
+/// Depth first directory traversing iterator.
+/// Requires manually entering directories with [`DirIter::enter_dir`].
 pub struct DirIter<T> {
     follow_symlinks: bool,
     stack: Vec<T>,
@@ -68,6 +70,7 @@ impl<T: DirStackEntry> DirIter<T> {
         Ok(Some(item))
     }
 
+    /// Enter a directory, probably received in [`DirIterItem::Dir`].
     pub fn enter_dir(&mut self, path: PathBuf) -> std::io::Result<()> {
         let iter = std::fs::read_dir(&path)?;
         let dir = T::new(path, iter);
