@@ -20,7 +20,6 @@ const ANSII_CLEAR: &str = "\x1b[0m";
 #[derive(Parser)]
 #[clap(name = "cargo-swoop")]
 pub struct Args {
-    #[clap(long)]
     search_dir: Option<PathBuf>,
 
     #[clap(long)]
